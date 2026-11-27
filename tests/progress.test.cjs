@@ -20,8 +20,8 @@ function completePath(scenario, firstChoice, secondChoice, progress = createProg
   return recordDecision(afterFirst, firstChoice.next, secondChoice, true, '2026-01-01T10:01:00.000Z')
 }
 
-test('the four existing scenarios retain tagged, skill-linked choices and record complete evidence', () => {
-  assert.deepEqual(scenarios.map(scenario => scenario.id), ['client', 'colleagues', 'pressure', 'admin'])
+test('all eight scenarios retain distinct role metadata and complete decision evidence', () => {
+  assert.deepEqual(scenarios.map(scenario => scenario.id), ['client', 'colleagues', 'pressure', 'admin', 'handover', 'scope', 'capacity', 'feedback'])
 
   let choiceCount = 0
   for (const scenario of scenarios) {
@@ -30,9 +30,11 @@ test('the four existing scenarios retain tagged, skill-linked choices and record
         choiceCount += 1
         assert.ok(choice.behavior.trim(), `${scenario.id}/${stepKey} behavior tag`)
         assert.ok(choice.skills.length > 0, `${scenario.id}/${stepKey} linked skills`)
+        assert.ok(choice.impact && choice.alternative && choice.lesson, `${scenario.id}/${stepKey} decision feedback`)
         assert.ok(scenario.steps[choice.next], `${scenario.id}/${stepKey} next step exists`)
       }
     }
+    assert.ok(scenario.domain && scenario.role && scenario.difficulty, `${scenario.id} personalization metadata`)
 
     for (const firstChoice of scenario.steps.start.choices) {
       for (const secondChoice of scenario.steps[firstChoice.next].choices) {
@@ -50,7 +52,7 @@ test('the four existing scenarios retain tagged, skill-linked choices and record
     }
   }
 
-  assert.equal(choiceCount, 36)
+  assert.ok(choiceCount > 60)
 })
 
 test('back removes exactly the latest choice and recalculates the current run', () => {

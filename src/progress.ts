@@ -10,6 +10,9 @@ export type DecisionEvidence = {
   skills: string[]
   points: number
   feedback: string
+  impact?: string
+  alternative?: string
+  lesson?: string
   occurredAt: string
 }
 
@@ -56,6 +59,9 @@ export function recordDecision(
     skills: [...choice.skills],
     points: choice.points,
     feedback: choice.feedback,
+    impact: choice.impact,
+    alternative: choice.alternative,
+    lesson: choice.lesson,
     occurredAt,
   }
   const nextHistory = [...history, evidence]

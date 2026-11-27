@@ -9,7 +9,7 @@ const source = fs.readFileSync(path.join(__dirname, '../src/data.ts'), 'utf8')
 const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } }).outputText
 const sandbox = { exports: {} }
 vm.runInNewContext(compiled, sandbox)
-const scenarios = sandbox.exports.scenarios
+const { filterScenarios, scenarios } = sandbox.exports
 
 test('every scenario has distinct questions and tailored options', () => {
   const prompts = []
@@ -45,4 +45,11 @@ test('all scenario branches terminate and required skills are covered', () => {
   for (const skill of ['التواصل', 'حل المشكلات', 'إدارة الخلاف', 'اتخاذ القرار', 'العمل الجماعي', 'إدارة الوقت', 'تحمل المسؤولية']) {
     assert.ok(visitedSkills.has(skill), `missing required skill: ${skill}`)
   }
+})
+
+test('personalization filters respect domain, skill, and difficulty together', () => {
+  const results = filterScenarios(scenarios, { domain: 'إدارة الفرق', skill: 'العمل الجماعي', difficulty: 'متقدم' })
+  assert.ok(results.length > 0)
+  assert.ok(results.every(scenario => scenario.domain === 'إدارة الفرق' && scenario.skills.includes('العمل الجماعي') && scenario.difficulty === 'متقدم'))
+  assert.equal(filterScenarios(scenarios, { domain: 'غير موجود', skill: 'الكل', difficulty: 'الكل' }).length, 0)
 })
