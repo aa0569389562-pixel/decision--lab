@@ -78,7 +78,8 @@ test('back removes exactly the latest choice and recalculates the current run', 
 
 test('retry creates an empty attempt while keeping the best result separate', () => {
   const scenario = scenarios[0]
-  const bestRun = completePath(scenario, scenario.steps.start.choices[0], scenario.steps.clarify.choices[0])
+  const bestFirstChoice = scenario.steps.start.choices[0]
+  const bestRun = completePath(scenario, bestFirstChoice, scenario.steps[bestFirstChoice.next].choices[0])
   assert.equal(bestRun.best, 100)
 
   const retry = createProgress(bestRun.best, 'attempt-two')
@@ -90,7 +91,8 @@ test('retry creates an empty attempt while keeping the best result separate', ()
   assert.deepEqual(retry.history, [])
   assert.notEqual(retry.attemptId, bestRun.attemptId)
 
-  const lowerRun = completePath(scenario, scenario.steps.start.choices[1], scenario.steps.fast.choices[1], retry)
+  const lowerFirstChoice = scenario.steps.start.choices[1]
+  const lowerRun = completePath(scenario, lowerFirstChoice, scenario.steps[lowerFirstChoice.next].choices[1], retry)
   assert.equal(lowerRun.score, 1)
   assert.equal(lowerRun.best, 100)
   assert.equal(lowerRun.history.length, 2)
