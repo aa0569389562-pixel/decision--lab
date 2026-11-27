@@ -9,7 +9,7 @@ const source = fs.readFileSync(path.join(__dirname, '../src/data.ts'), 'utf8')
 const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } }).outputText
 const sandbox = { exports: {} }
 vm.runInNewContext(compiled, sandbox)
-const { filterScenarios, matchScenarios, scenarios } = sandbox.exports
+const { DEFAULT_SCENARIO_FILTERS, filterScenarios, matchScenarios, resetScenarioFilters, scenarios } = sandbox.exports
 
 test('every scenario has distinct questions and tailored options', () => {
   const prompts = []
@@ -65,6 +65,7 @@ test('every available domain, skill, and difficulty combination returns exact or
     if (match.exact) assert.ok(match.scenarios.every(s => s.domain === domain && s.difficulty === difficulty && s.skills.includes(skill)))
     else assert.ok(match.scenarios.every(s => s.domain === domain || s.difficulty === difficulty || s.skills.includes(skill)), 'fallback must overlap at least one selected field')
   }
+  assert.ok(domains.length > 1 && skills.length > 1 && difficulties.length === 3)
 })
 
 test('fallback ranks scenarios by the number of matching fields and counters reflect displayed results', () => {
@@ -75,4 +76,25 @@ test('fallback ranks scenarios by the number of matching fields and counters ref
   const score = scenario => (scenario.domain === 'إدارة الفرق' ? 4 : 0) + (scenario.skills.includes('التواصل') ? 3 : 0) + (scenario.difficulty === 'مبتدئ' ? 2 : 0)
   assert.equal(score(result.scenarios[0]), Math.max(...scenarios.map(score)))
   assert.equal(matchScenarios(scenarios, { domain: 'الكل', skill: 'الكل', difficulty: 'الكل' }).scenarios.length, scenarios.length)
+})
+
+test('scenario classifications use supported values and filter controls reset to all scenarios', () => {
+  const domains = new Set(scenarios.map(scenario => scenario.domain))
+  const availableSkills = new Set(scenarios.flatMap(scenario => scenario.skills))
+  for (const scenario of scenarios) {
+    assert.ok(domains.has(scenario.domain), `${scenario.id} has a known domain`)
+    assert.ok(['مبتدئ', 'متوسط', 'متقدم'].includes(scenario.difficulty), `${scenario.id} has a supported difficulty`)
+    assert.ok(['موظف', 'مشرف', 'قائد فريق'].includes(scenario.role), `${scenario.id} has a supported role`)
+    assert.ok(scenario.skills.length > 0 && scenario.skills.every(skill => availableSkills.has(skill)))
+  }
+  assert.deepEqual(resetScenarioFilters(), DEFAULT_SCENARIO_FILTERS)
+  assert.equal(filterScenarios(scenarios, resetScenarioFilters()).length, scenarios.length)
+})
+
+test('invalid saved filter values never produce an empty page or claim an exact match', () => {
+  const result = matchScenarios(scenarios, { domain: 'مجال قديم', skill: 'مهارة محذوفة', difficulty: 'سهل جدًا' })
+  assert.equal(result.exact, false)
+  assert.equal(result.hasOverlap, false)
+  assert.equal(result.exactCount, 0)
+  assert.ok(result.scenarios.length > 0)
 })

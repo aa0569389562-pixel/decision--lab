@@ -2,8 +2,10 @@ export type Choice = { label: string; detail: string; next: string; points: numb
 export type Step = { eyebrow: string; title: string; body: string; choices: Choice[] }
 export type Scenario = { id: string; number: string; title: string; category: string; domain: string; role: 'موظف' | 'مشرف' | 'قائد فريق'; difficulty: 'مبتدئ' | 'متوسط' | 'متقدم'; duration: string; level: string; icon: string; color: string; description: string; skills: string[]; steps: Record<string, Step> }
 export type ScenarioFilters = { domain: string; skill: string; difficulty: string }
+export const DEFAULT_SCENARIO_FILTERS: ScenarioFilters = { domain: 'الكل', skill: 'الكل', difficulty: 'الكل' }
+export function resetScenarioFilters(): ScenarioFilters { return { ...DEFAULT_SCENARIO_FILTERS } }
 
-export type ScenarioMatch = { scenarios: Scenario[]; exact: boolean; exactCount: number }
+export type ScenarioMatch = { scenarios: Scenario[]; exact: boolean; exactCount: number; hasOverlap: boolean }
 
 function normalized(value: string): string {
   return value.normalize('NFKC').trim().replace(/[\u064b-\u065f\u0670\u0640]/g, '').replace(/[أإآ]/g, 'ا').replace(/ى/g, 'ي').toLocaleLowerCase('ar')
@@ -21,13 +23,13 @@ export function matchScenarios(items: Scenario[], filters: ScenarioFilters): Sce
   const exactMatches = items.filter(scenario => scenarioMatchScore(scenario, filters) === (filters.domain === 'الكل' ? 0 : 4)
     + (filters.skill === 'الكل' ? 0 : 3)
     + (filters.difficulty === 'الكل' ? 0 : 2))
-  if (exactMatches.length) return { scenarios: exactMatches, exact: true, exactCount: exactMatches.length }
+  if (exactMatches.length) return { scenarios: exactMatches, exact: true, exactCount: exactMatches.length, hasOverlap: true }
 
   const ranked = items.map((scenario, index) => ({ scenario, index, score: scenarioMatchScore(scenario, filters) }))
     .filter(item => item.score > 0)
     .sort((a, b) => b.score - a.score || a.index - b.index)
   const suggestions = ranked.length ? ranked.slice(0, 3).map(item => item.scenario) : items.slice(0, 3)
-  return { scenarios: suggestions, exact: false, exactCount: 0 }
+  return { scenarios: suggestions, exact: false, exactCount: 0, hasOverlap: ranked.length > 0 }
 }
 
 export function filterScenarios(items: Scenario[], filters: ScenarioFilters): Scenario[] {
