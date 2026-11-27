@@ -20,7 +20,7 @@ Module._resolveFilename = function resolveTypeScriptModules(request, parent, ...
 }
 
 const { scenarios } = require(path.join(__dirname, '../src/data.ts'))
-const { analyzeDecisionReport } = require(path.join(__dirname, '../src/analysis.ts'))
+const { analyzeDecisionReport, canViewProfessionalReport, PROFESSIONAL_REPORT_MIN_SCENARIOS } = require(path.join(__dirname, '../src/analysis.ts'))
 const { createProgress, recordDecision } = require(path.join(__dirname, '../src/progress.ts'))
 
 function run(firstIndex, secondIndex) {
@@ -46,5 +46,23 @@ test('empty report is explicit and offers a useful next step', () => {
   const report = analyzeDecisionReport({})
   assert.equal(report.score, null)
   assert.equal(report.level, 'ابدأ أول موقف')
-  assert.ok(report.recommendations[0].includes('موقفين'))
+  assert.ok(report.recommendations[0].includes('ثلاثة مواقف'))
+})
+
+test('professional report unlock threshold is exactly three completed scenarios', () => {
+  assert.equal(PROFESSIONAL_REPORT_MIN_SCENARIOS, 3)
+  assert.equal(canViewProfessionalReport(0), false)
+  assert.equal(canViewProfessionalReport(2), false)
+  assert.equal(canViewProfessionalReport(3), true)
+  assert.equal(canViewProfessionalReport(8), true)
+})
+
+test('report counts and analyzes only completed scenarios, including after progress persistence', () => {
+  const completed = run(0, 0)
+  const inProgress = { ...run(1, 1), completed: false }
+  const restored = JSON.parse(JSON.stringify({ client: completed, colleagues: completed, pressure: inProgress }))
+  const report = analyzeDecisionReport(restored)
+  assert.equal(report.completedScenarios, 2)
+  assert.equal(report.evidenceCount, 4)
+  assert.deepEqual(report.strengths.flatMap(item => item.examples).some(example => example.includes('إرسال الملف المتاح فوراً')), false)
 })

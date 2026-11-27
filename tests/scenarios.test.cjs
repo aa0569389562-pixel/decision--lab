@@ -9,7 +9,7 @@ const source = fs.readFileSync(path.join(__dirname, '../src/data.ts'), 'utf8')
 const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } }).outputText
 const sandbox = { exports: {} }
 vm.runInNewContext(compiled, sandbox)
-const { filterScenarios, scenarios } = sandbox.exports
+const { filterScenarios, matchScenarios, scenarios } = sandbox.exports
 
 test('every scenario has distinct questions and tailored options', () => {
   const prompts = []
@@ -51,5 +51,28 @@ test('personalization filters respect domain, skill, and difficulty together', (
   const results = filterScenarios(scenarios, { domain: 'إدارة الفرق', skill: 'العمل الجماعي', difficulty: 'متقدم' })
   assert.ok(results.length > 0)
   assert.ok(results.every(scenario => scenario.domain === 'إدارة الفرق' && scenario.skills.includes('العمل الجماعي') && scenario.difficulty === 'متقدم'))
-  assert.equal(filterScenarios(scenarios, { domain: 'غير موجود', skill: 'الكل', difficulty: 'الكل' }).length, 0)
+  assert.ok(filterScenarios(scenarios, { domain: 'غير موجود', skill: 'الكل', difficulty: 'الكل' }).length > 0)
+})
+
+test('every available domain, skill, and difficulty combination returns exact or nearest scenarios', () => {
+  const domains = [...new Set(scenarios.map(scenario => scenario.domain))]
+  const skills = [...new Set(scenarios.flatMap(scenario => scenario.skills))]
+  const difficulties = [...new Set(scenarios.map(scenario => scenario.difficulty))]
+  for (const domain of domains) for (const skill of skills) for (const difficulty of difficulties) {
+    const match = matchScenarios(scenarios, { domain, skill, difficulty })
+    assert.ok(match.scenarios.length > 0, `${domain} / ${skill} / ${difficulty} must never be blank`)
+    assert.ok(match.scenarios.length <= 3 || match.exact, 'fallback should be limited to the closest three scenarios')
+    if (match.exact) assert.ok(match.scenarios.every(s => s.domain === domain && s.difficulty === difficulty && s.skills.includes(skill)))
+    else assert.ok(match.scenarios.every(s => s.domain === domain || s.difficulty === difficulty || s.skills.includes(skill)), 'fallback must overlap at least one selected field')
+  }
+})
+
+test('fallback ranks scenarios by the number of matching fields and counters reflect displayed results', () => {
+  const result = matchScenarios(scenarios, { domain: 'إدارة الفرق', skill: 'التواصل', difficulty: 'مبتدئ' })
+  assert.equal(result.exact, false)
+  assert.equal(result.exactCount, 0)
+  assert.ok(result.scenarios.length > 0)
+  const score = scenario => (scenario.domain === 'إدارة الفرق' ? 4 : 0) + (scenario.skills.includes('التواصل') ? 3 : 0) + (scenario.difficulty === 'مبتدئ' ? 2 : 0)
+  assert.equal(score(result.scenarios[0]), Math.max(...scenarios.map(score)))
+  assert.equal(matchScenarios(scenarios, { domain: 'الكل', skill: 'الكل', difficulty: 'الكل' }).scenarios.length, scenarios.length)
 })

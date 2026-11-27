@@ -7,10 +7,17 @@ export type DecisionReport = {
   level: string
   score: number | null
   evidenceCount: number
+  completedScenarios: number
   dimensions: DimensionResult[]
   strengths: SkillPattern[]
   development: SkillPattern[]
   recommendations: string[]
+}
+
+export const PROFESSIONAL_REPORT_MIN_SCENARIOS = 3
+
+export function canViewProfessionalReport(completedScenarios: number): boolean {
+  return completedScenarios >= PROFESSIONAL_REPORT_MIN_SCENARIOS
 }
 
 const dimensions: Array<{ id: string; label: string; match: (skill: string) => boolean }> = [
@@ -26,7 +33,7 @@ const dimensions: Array<{ id: string; label: string; match: (skill: string) => b
 export function analyzeDecisionReport(store: ProgressStore): DecisionReport {
   const evidence = scenarios.flatMap(scenario => {
     const progress = store[scenario.id]
-    if (!progress) return []
+    if (!progress?.completed) return []
     return (progress.history || []).filter(item => !progress.attemptId || !item.attemptId || item.attemptId === progress.attemptId)
   })
   const averageScore = (items: typeof evidence) => items.length
@@ -58,12 +65,13 @@ export function analyzeDecisionReport(store: ProgressStore): DecisionReport {
     return 'قارن البدائل على أساس الأثر والمخاطر والوقت، ثم وثق سبب اختيارك.'
   })
   if (!recommendations.length && evidence.length) recommendations.push('وسّع التدريب إلى مجال وظيفي مختلف، ثم قارن كيف تغيّر قرارك مع اختلاف السياق.')
-  if (!recommendations.length) recommendations.push('أكمل موقفين على الأقل لتظهر أنماط قراراتك وتوصيات مبنية على قرائن أكثر.')
+  if (!recommendations.length) recommendations.push('أكمل ثلاثة مواقف على الأقل لتظهر أنماط قراراتك وتوصيات مبنية على قرائن أكثر.')
 
   return {
     level,
     score,
     evidenceCount: evidence.length,
+    completedScenarios: scenarios.filter(scenario => store[scenario.id]?.completed).length,
     dimensions: dimensions.map(dimension => {
       const items = evidence.filter(item => (item.skills || []).some(dimension.match))
       return { id: dimension.id, label: dimension.label, score: averageScore(items), evidenceCount: items.length }
