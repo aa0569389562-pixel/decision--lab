@@ -20,6 +20,14 @@ export function canViewProfessionalReport(completedScenarios: number): boolean {
   return completedScenarios >= PROFESSIONAL_REPORT_MIN_SCENARIOS
 }
 
+export type DecisionEvaluation = { kind: 'strength' | 'development'; label: string; guidance: string }
+
+export function evaluateDecision(points: number): DecisionEvaluation {
+  return points >= 2
+    ? { kind: 'strength', label: 'نقطة قوة ظهرت في اختيارك', guidance: 'استخدمت سلوكاً مساعداً في هذا السياق. كرره عند التعامل مع موقف مشابه.' }
+    : { kind: 'development', label: 'جانب للتطوير في اختيارك', guidance: 'هذه فرصة لتجربة أسلوب أكثر فاعلية في موقف مشابه.' }
+}
+
 const dimensions: Array<{ id: string; label: string; match: (skill: string) => boolean }> = [
   { id: 'decision', label: 'اتخاذ القرار', match: skill => /قرار|أولوي|مخاطر|تفكير/.test(skill) },
   { id: 'communication', label: 'التواصل', match: skill => /تواصل|إنصات|استماع/.test(skill) },

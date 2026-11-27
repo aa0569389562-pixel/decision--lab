@@ -20,7 +20,7 @@ Module._resolveFilename = function resolveTypeScriptModules(request, parent, ...
 }
 
 const { scenarios } = require(path.join(__dirname, '../src/data.ts'))
-const { analyzeDecisionReport, canViewProfessionalReport, PROFESSIONAL_REPORT_MIN_SCENARIOS } = require(path.join(__dirname, '../src/analysis.ts'))
+const { analyzeDecisionReport, canViewProfessionalReport, evaluateDecision, PROFESSIONAL_REPORT_MIN_SCENARIOS } = require(path.join(__dirname, '../src/analysis.ts'))
 const { createProgress, recordDecision } = require(path.join(__dirname, '../src/progress.ts'))
 
 function run(firstIndex, secondIndex) {
@@ -47,6 +47,13 @@ test('empty report is explicit and offers a useful next step', () => {
   assert.equal(report.score, null)
   assert.equal(report.level, 'ابدأ أول موقف')
   assert.ok(report.recommendations[0].includes('ثلاثة مواقف'))
+})
+
+test('answer feedback clearly distinguishes a strength from a development opportunity', () => {
+  assert.equal(evaluateDecision(3).kind, 'strength')
+  assert.ok(evaluateDecision(3).guidance.includes('كرره'))
+  assert.equal(evaluateDecision(1).kind, 'development')
+  assert.ok(evaluateDecision(1).guidance.includes('أسلوب أكثر فاعلية'))
 })
 
 test('professional report unlock threshold is exactly three completed scenarios', () => {

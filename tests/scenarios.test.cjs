@@ -14,7 +14,11 @@ const { DEFAULT_SCENARIO_FILTERS, filterScenarios, matchScenarios, resetScenario
 test('every scenario has distinct questions and tailored options', () => {
   const prompts = []
   const options = []
+  const ids = []
+  const titles = []
   for (const scenario of scenarios) {
+    ids.push(scenario.id)
+    titles.push(scenario.title)
     for (const [stepId, step] of Object.entries(scenario.steps)) {
       if (!step.choices.length) continue
       prompts.push(`${step.title.trim()}|${step.body.trim()}`)
@@ -24,6 +28,8 @@ test('every scenario has distinct questions and tailored options', () => {
   }
   assert.equal(new Set(prompts).size, prompts.length, 'question text is repeated across scenarios or branches')
   assert.equal(new Set(options).size, options.length, 'answer option is repeated across scenarios or branches')
+  assert.equal(new Set(ids).size, scenarios.length, 'scenario identifiers must be unique')
+  assert.equal(new Set(titles).size, scenarios.length, 'scenario titles must be unique')
 })
 
 test('all scenario branches terminate and required skills are covered', () => {
@@ -62,8 +68,12 @@ test('every available domain, skill, and difficulty combination returns exact or
     const match = matchScenarios(scenarios, { domain, skill, difficulty })
     assert.ok(match.scenarios.length > 0, `${domain} / ${skill} / ${difficulty} must never be blank`)
     assert.ok(match.scenarios.length <= 3 || match.exact, 'fallback should be limited to the closest three scenarios')
-    if (match.exact) assert.ok(match.scenarios.every(s => s.domain === domain && s.difficulty === difficulty && s.skills.includes(skill)))
-    else assert.ok(match.scenarios.every(s => s.domain === domain || s.difficulty === difficulty || s.skills.includes(skill)), 'fallback must overlap at least one selected field')
+    if (match.exact) {
+      assert.ok(match.suggestions.every(suggestion => suggestion.fitPercent >= 80))
+      assert.ok(match.suggestions.every(suggestion => suggestion.reasons.some(reason => reason.includes(skill))))
+      assert.ok(match.scenarios.every(s => s.domain === domain && s.difficulty === difficulty))
+    }
+    else assert.ok(match.suggestions.every(suggestion => suggestion.reasons.some(reason => reason.includes(domain) || reason.includes(difficulty) || reason.includes(skill))), 'fallback must explain at least one literal or semantic match')
   }
   assert.ok(domains.length > 1 && skills.length > 1 && difficulties.length === 3)
 })
@@ -97,4 +107,25 @@ test('invalid saved filter values never produce an empty page or claim an exact 
   assert.equal(result.hasOverlap, false)
   assert.equal(result.exactCount, 0)
   assert.ok(result.scenarios.length > 0)
+})
+
+test('semantically related skills count as relevant and explain the recommendation', () => {
+  const result = matchScenarios(scenarios, { domain: 'التقنية والمنتجات', skill: 'إدارة التوقعات', difficulty: 'متوسط' })
+  const suggestion = result.suggestions.find(item => item.scenario.id === 'scope')
+  assert.ok(suggestion, 'technical product scenario should be recommended for expectation management')
+  assert.ok(result.exact, 'strong semantic overlap should not be presented as a mismatch')
+  assert.ok(suggestion.fitPercent >= 90)
+  assert.ok(suggestion.reasons.some(reason => reason.includes('مهارة مرتبطة')))
+  assert.ok(suggestion.reasons.some(reason => reason.includes('التواصل')))
+})
+
+test('all domains, skills, and difficulty levels have scenario coverage', () => {
+  const requiredSkills = ['التواصل', 'تحمل المسؤولية', 'إدارة التوقعات', 'الإنصات الفعّال', 'إدارة الخلاف', 'العمل الجماعي', 'اتخاذ القرار', 'إدارة الوقت', 'حل المشكلات']
+  const requiredDifficulties = ['مبتدئ', 'متوسط', 'متقدم']
+  const coveredDomains = new Set(scenarios.map(scenario => scenario.domain))
+  const coveredSkills = new Set(scenarios.flatMap(scenario => scenario.skills))
+  const coveredDifficulties = new Set(scenarios.map(scenario => scenario.difficulty))
+  for (const domain of coveredDomains) assert.ok(scenarios.some(scenario => scenario.domain === domain))
+  for (const skill of requiredSkills) assert.ok(coveredSkills.has(skill), `missing skill coverage: ${skill}`)
+  for (const difficulty of requiredDifficulties) assert.ok(coveredDifficulties.has(difficulty), `missing difficulty coverage: ${difficulty}`)
 })

@@ -5,31 +5,69 @@ export type ScenarioFilters = { domain: string; skill: string; difficulty: strin
 export const DEFAULT_SCENARIO_FILTERS: ScenarioFilters = { domain: 'الكل', skill: 'الكل', difficulty: 'الكل' }
 export function resetScenarioFilters(): ScenarioFilters { return { ...DEFAULT_SCENARIO_FILTERS } }
 
-export type ScenarioMatch = { scenarios: Scenario[]; exact: boolean; exactCount: number; hasOverlap: boolean }
+export type ScenarioSuggestion = { scenario: Scenario; fitPercent: number; reasons: string[] }
+export type ScenarioMatch = { scenarios: Scenario[]; suggestions: ScenarioSuggestion[]; exact: boolean; exactCount: number; hasOverlap: boolean }
 
 function normalized(value: string): string {
   return value.normalize('NFKC').trim().replace(/[\u064b-\u065f\u0670\u0640]/g, '').replace(/[أإآ]/g, 'ا').replace(/ى/g, 'ي').toLocaleLowerCase('ar')
 }
 
-function scenarioMatchScore(scenario: Scenario, filters: ScenarioFilters): number {
+const relatedSkills: Record<string, string[]> = {
+  'التواصل': ['الإنصات الفعّال', 'إدارة التوقعات'],
+  'الإنصات الفعّال': ['التواصل', 'إدارة التوقعات'],
+  'إدارة التوقعات': ['التواصل', 'الإنصات الفعّال'],
+  'إدارة الخلاف': ['العمل الجماعي', 'التواصل'],
+  'العمل الجماعي': ['إدارة الخلاف', 'التواصل'],
+  'اتخاذ القرار': ['إدارة الوقت', 'حل المشكلات'],
+  'إدارة الوقت': ['اتخاذ القرار', 'تحمل المسؤولية'],
+  'حل المشكلات': ['اتخاذ القرار', 'تحمل المسؤولية'],
+  'تحمل المسؤولية': ['إدارة الوقت', 'حل المشكلات'],
+}
+
+function skillMatchStrength(scenario: Scenario, selectedSkill: string): 0 | 0.82 | 1 {
+  const scenarioSkills = scenario.skills.map(normalized)
+  const selected = normalized(selectedSkill)
+  if (scenarioSkills.includes(selected)) return 1
+  const related = relatedSkills[selectedSkill] || []
+  return related.some(skill => scenarioSkills.includes(normalized(skill))) ? 0.82 : 0
+}
+
+function scenarioMatchDetails(scenario: Scenario, filters: ScenarioFilters): { score: number; maximum: number; reasons: string[] } {
+  const reasons: string[] = []
+  const domainSelected = filters.domain !== 'الكل'
+  const skillSelected = filters.skill !== 'الكل'
+  const difficultySelected = filters.difficulty !== 'الكل'
   let score = 0
-  if (filters.domain !== 'الكل' && normalized(scenario.domain) === normalized(filters.domain)) score += 4
-  if (filters.skill !== 'الكل' && scenario.skills.some(skill => normalized(skill) === normalized(filters.skill))) score += 3
-  if (filters.difficulty !== 'الكل' && normalized(scenario.difficulty) === normalized(filters.difficulty)) score += 2
-  return score
+  const maximum = (domainSelected ? 4 : 0) + (skillSelected ? 3 : 0) + (difficultySelected ? 2 : 0)
+  if (domainSelected && normalized(scenario.domain) === normalized(filters.domain)) { score += 4; reasons.push(`يطابق المجال: ${scenario.domain}`) }
+  const skillStrength = skillSelected ? skillMatchStrength(scenario, filters.skill) : 0
+  if (skillStrength === 1) { score += 3; reasons.push(`يقيس المهارة المختارة مباشرة: ${filters.skill}`) }
+  else if (skillStrength > 0) { score += 3 * skillStrength; reasons.push(`يقيس مهارة مرتبطة بـ${filters.skill}: ${scenario.skills.find(skill => (relatedSkills[filters.skill] || []).some(related => normalized(related) === normalized(skill)))}`) }
+  if (difficultySelected && normalized(scenario.difficulty) === normalized(filters.difficulty)) { score += 2; reasons.push(`يناسب مستوى ${scenario.difficulty}`) }
+  if (!domainSelected && !skillSelected && !difficultySelected) reasons.push('موقف متاح ضمن جميع السيناريوهات')
+  return { score, maximum, reasons }
+}
+
+function asSuggestion(scenario: Scenario, filters: ScenarioFilters, exact = false): ScenarioSuggestion {
+  const details = scenarioMatchDetails(scenario, filters)
+  return {
+    scenario,
+    fitPercent: exact ? 100 : details.maximum ? Math.round(details.score / details.maximum * 100) : 100,
+    reasons: details.reasons.length ? details.reasons : ['اقتراح عام؛ لا يوجد تطابق مع القيم المختارة'],
+  }
 }
 
 export function matchScenarios(items: Scenario[], filters: ScenarioFilters): ScenarioMatch {
-  const exactMatches = items.filter(scenario => scenarioMatchScore(scenario, filters) === (filters.domain === 'الكل' ? 0 : 4)
-    + (filters.skill === 'الكل' ? 0 : 3)
-    + (filters.difficulty === 'الكل' ? 0 : 2))
-  if (exactMatches.length) return { scenarios: exactMatches, exact: true, exactCount: exactMatches.length, hasOverlap: true }
+  const maximumScore = (filters.domain === 'الكل' ? 0 : 4) + (filters.skill === 'الكل' ? 0 : 3) + (filters.difficulty === 'الكل' ? 0 : 2)
+  const minimumRelevanceScore = maximumScore * 0.8
+  const exactMatches = items.filter(scenario => scenarioMatchDetails(scenario, filters).score >= minimumRelevanceScore)
+  if (exactMatches.length) return { scenarios: exactMatches, suggestions: exactMatches.map(scenario => asSuggestion(scenario, filters, true)), exact: true, exactCount: exactMatches.length, hasOverlap: true }
 
-  const ranked = items.map((scenario, index) => ({ scenario, index, score: scenarioMatchScore(scenario, filters) }))
+  const ranked = items.map((scenario, index) => ({ scenario, index, ...scenarioMatchDetails(scenario, filters) }))
     .filter(item => item.score > 0)
     .sort((a, b) => b.score - a.score || a.index - b.index)
-  const suggestions = ranked.length ? ranked.slice(0, 3).map(item => item.scenario) : items.slice(0, 3)
-  return { scenarios: suggestions, exact: false, exactCount: 0, hasOverlap: ranked.length > 0 }
+  const suggestions = ranked.length ? ranked.slice(0, 3).map(item => asSuggestion(item.scenario, filters)) : items.slice(0, 3).map(scenario => asSuggestion(scenario, filters))
+  return { scenarios: suggestions.map(item => item.scenario), suggestions, exact: false, exactCount: 0, hasOverlap: ranked.length > 0 }
 }
 
 export function filterScenarios(items: Scenario[], filters: ScenarioFilters): Scenario[] {
